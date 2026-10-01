@@ -1,10 +1,10 @@
-
 .stApp {
     background-color: #FDFBF7;
     color: #2C2A29;
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
+/* Sidebar */
 [data-testid="stSidebar"] {
     background-color: #F4EDE2;
     border-right: 1px solid #E3D9C6;
@@ -28,7 +28,7 @@
     margin-bottom: 30px;
 }
 
-/* Tarjetas de contenido con relieve sutil */
+/* Tarjetas de contenido  */
 .tarjeta-info {
     background: #FFFFFF;
     border: 1px solid #E8E1D5;
@@ -36,16 +36,9 @@
     border-radius: 12px;
     box-shadow: 0 4px 12px rgba(74, 59, 50, 0.05);
     margin-bottom: 20px;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.tarjeta-info:hover {
-    border-color: #C2A687;
-    transform: translateY(-3px);
-    box-shadow: 0 6px 16px rgba(74, 59, 50, 0.1);
-}
-
-/* Botones con estilo profesional */
+/* Botones  */
 .stButton > button {
     background-color: #5C4033;
     color: #FFFFFF;
@@ -54,10 +47,4 @@
     border: none;
     padding: 0.6rem 1rem;
     width: 100%;
-    transition: background-color 0.2s;
-}
-
-.stButton > button:hover {
-    background-color: #4A3B32;
-    color: #FDFBF7;
 }
