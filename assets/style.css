@@ -1,55 +1,288 @@
-/* Estilos generales tipo E-commerce moderno */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
 .stApp {
-    background-color: #FAFAFA;
-    color: #2C2A29;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #F6F5F0;
+    color: #1E242B;
+    font-family: 'Plus Jakarta Sans', sans-serif;
 }
 
-/* Barra superior institucional en azul marino elegante (combinado con la taza) */
-.header-libreria {
-    background-color: #1B2A4A;
-    padding: 20px 30px;
+h1, h2, h3 {
+    font-family: 'Playfair Display', Georgia, serif !important;
+}
+
+.block-container {
+    padding-top: 2.5rem !important;
+    padding-bottom: 2rem !important;
+    max-width: 1380px !important;
+}
+
+/* Franja superior limpia */
+.franja-azul-limpia {
+    background: linear-gradient(135deg, #14213D 0%, #1B2A4A 100%);
+    height: 54px;
+    width: 100%;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(20, 33, 61, 0.14);
+    border-bottom: 3px solid #E6C687;
+}
+
+@keyframes difuminarBannerFondo {
+    0%, 12% { filter: blur(0px) brightness(1); transform: scale(1); }
+    18%, 92% { filter: blur(6px) brightness(0.35); transform: scale(1.02); }
+    98%, 100% { filter: blur(0px) brightness(1); transform: scale(1); }
+}
+
+@keyframes mostrarCarruselInterno {
+    0%, 12% { opacity: 0; pointer-events: none; }
+    18%, 92% { opacity: 1; pointer-events: auto; }
+    98%, 100% { opacity: 0; pointer-events: none; }
+}
+
+@keyframes desplazarRecomendados {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+
+.contenedor-imagen-banner {
+    position: relative;
+    width: 100%;
+    height: 275px;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 8px 22px rgba(20, 33, 61, 0.16);
+    margin: 8px 0 18px 0;
+    background-color: #14213D;
+}
+
+.imagen-banner-fondo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background-size: cover;
+    background-position: center;
+    animation: difuminarBannerFondo 22s infinite ease-in-out;
+}
+
+.capa-libros-dentro-banner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 10px 0;
+    animation: mostrarCarruselInterno 22s infinite ease-in-out;
+}
+
+.contenedor-imagen-banner:hover .imagen-banner-fondo {
+    filter: blur(7px) brightness(0.32) !important;
+    animation-play-state: paused !important;
+}
+
+.contenedor-imagen-banner:hover .capa-libros-dentro-banner {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    animation-play-state: paused !important;
+}
+
+.contenedor-imagen-banner:hover .carrusel-pista {
+    animation-play-state: paused !important;
+}
+
+.etiqueta-superior-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 24px 6px 24px;
+}
+
+.carrusel-pista {
+    display: flex;
+    gap: 20px;
+    width: max-content;
+    padding: 2px 24px;
+    animation: desplazarRecomendados 32s linear infinite;
+}
+
+.item-recomendado-banner {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    width: 350px;
+    height: 190px;
+    background: rgba(20, 33, 61, 0.88);
+    backdrop-filter: blur(10px);
+    border: 1.5px solid rgba(230, 198, 135, 0.6);
+    border-radius: 14px;
+    padding: 12px 16px;
+    color: #FFFFFF;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+}
+
+.item-recomendado-banner:hover {
+    transform: translateY(-3px) scale(1.02);
+    border-color: #E6C687;
+}
+
+.item-recomendado-banner img {
+    width: 105px;
+    height: 158px;
+    object-fit: cover;
     border-radius: 8px;
+    border: 2px solid #E6C687;
+    background-color: #F4F1EA;
+    flex-shrink: 0;
+}
+
+.item-recomendado-info {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+    flex: 1;
+    overflow: hidden;
+}
+
+.botones-dentro-banner {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.link-accion-banner {
+    flex: 1;
     text-align: center;
-    color: white;
-    margin-bottom: 20px;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-decoration: none !important;
 }
 
-/* Contenedor y recorte elegante para el banner horizontal */
-.banner-contenedor img {
-    width: 100% !important;
-    height: 220px !important;
-    object-fit: cover !important;
-    object-position: center !important;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    margin-bottom: 20px;
+.link-comprar {
+    background-color: #E6C687;
+    color: #14213D !important;
 }
 
-/* Tarjetas de libros */
+.link-alquilar {
+    background-color: rgba(255,255,255,0.18);
+    color: #FFFFFF !important;
+    border: 1px solid rgba(255,255,255,0.4);
+}
+
 .tarjeta-libro {
-    background: white;
-    padding: 15px;
-    border-radius: 8px;
-    border: 1px solid #E5E5E5;
+    background: #FFFFFF;
+    padding: 16px 16px 14px 16px;
+    border-radius: 12px 12px 0 0;
+    border: 1px solid #E6E2D8;
+    border-bottom: none;
     text-align: center;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-    margin-bottom: 20px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.03);
+    height: 410px; 
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    margin-bottom: -14px;
 }
 
-/* Botones profesionales en azul institucional */
+.tarjeta-libro img {
+    width: 100%;
+    height: 200px;
+    object-fit: contain;
+    background-color: #F7F4EE;
+    border-radius: 8px;
+    padding: 6px;
+    margin-bottom: 8px;
+}
+
+.titulo-clamp {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-weight: 700;
+    font-size: 1rem;
+    color: #14213D;
+    margin: 4px 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: 2.5em;
+    line-height: 1.25;
+}
+
+.badge-categoria {
+    display: inline-block;
+    background-color: #EEF2F7;
+    color: #1B2A4A;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+
+.precio-libro {
+    color: #B81D33;
+    font-weight: 700;
+    font-size: 1.15rem;
+    margin: 4px 0;
+}
+
+/* Landing footer */
+.landing-footer-azul {
+    background: linear-gradient(135deg, #14213D 0%, #1B2A4A 100%);
+    color: #FFFFFF;
+    border-radius: 16px;
+    padding: 36px 34px 24px 34px;
+    margin-top: 32px;
+    box-shadow: 0 10px 28px rgba(20, 33, 61, 0.18);
+    border-top: 4px solid #E6C687;
+}
+
+.landing-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    margin-top: 18px;
+    margin-bottom: 24px;
+}
+
+.landing-card {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(230, 198, 135, 0.28);
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.landing-card h4 {
+    color: #E6C687;
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 1.18rem;
+    margin: 0 0 8px 0;
+}
+
+.landing-card p {
+    color: #E2E8F0;
+    font-size: 0.88rem;
+    line-height: 1.55;
+    margin: 0;
+}
+
 .stButton > button {
     background-color: #1B2A4A;
-    color: white;
+    color: #FFFFFF;
     font-weight: 600;
-    border-radius: 6px;
+    font-size: 0.83rem;
+    border-radius: 0 0 8px 8px;
     border: none;
-    padding: 0.5rem 1rem;
+    padding: 0.5rem 0.75rem;
     width: 100%;
+    transition: all 0.2s ease;
 }
 
 .stButton > button:hover {
-    background-color: #2C4370;
-    color: white;
+    background-color: #C89D54;
+    color: #14213D;
 }
