@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import pandas as pd
+import tempfile
 
 # IMPORTACIONES MODULARES
 from database.db_manager import init_db, obtener_libros_activos
@@ -27,13 +28,12 @@ def cargar_css(ruta_css):
 cargar_css("assets/style.css")
 conn = init_db()
 
-# CONTROL DE SESIÓN (Carrito en memoria, sin Base de Datos)
 if 'usuario_autenticado' not in st.session_state:
     st.session_state['usuario_autenticado'] = False
     st.session_state['user_data'] = None
     st.session_state['tipo_usuario'] = None
 if 'carrito' not in st.session_state:
-    st.session_state['carrito'] = []  # El carrito ahora vive en la memoria, cero errores.
+    st.session_state['carrito'] = []
 if 'cupon_activo' not in st.session_state:
     st.session_state['cupon_activo'] = 0.0
 if 'codigo_cupon_texto' not in st.session_state:
@@ -42,8 +42,6 @@ if 'vista_actual' not in st.session_state:
     st.session_state['vista_actual'] = "tienda" 
 if 'libro_alquiler_sel' not in st.session_state:
     st.session_state['libro_alquiler_sel'] = None
-
-# CAPTURAR CLICS DENTRO DEL BANNER ANIMADO
 params = st.query_params
 if "accion" in params and "isbn" in params:
     accion_url = params["accion"]
@@ -60,7 +58,6 @@ if "accion" in params and "isbn" in params:
     st.query_params.clear()
     st.rerun()
 
-# CABECERA GLOBAL (Logo y Botón Carrito)
 col_logo, col_azul, col_cart = st.columns([1.4, 4.3, 1.3], vertical_alignment="center")
 with col_logo:
     if os.path.exists("assets/logo.png"):
@@ -76,7 +73,6 @@ with col_cart:
         st.session_state['vista_actual'] = "ventana_carrito"
         st.rerun()
 
-# ENRUTADOR PRINCIPAL
 if st.session_state['vista_actual'] == "ventana_carrito":
     ventana_carrito_pasarela(conn)
 elif st.session_state['vista_actual'] == "ventana_prestamo":
@@ -100,9 +96,22 @@ else:
         opciones_menu = ["🏠 Explorar Tienda", "🛒 Ir a Mi Carrito y Pasarela", "📚 Mis Préstamos y Facturas"]
 
     with st.sidebar:
-        st.markdown("### 👤 Sesión Activa")
+        st.markdown(
+            f"""
+            <div style='
+                color: #14213D; 
+                font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif; 
+                font-size: 18px; 
+                font-weight: 600; 
+                letter-spacing: 0.5px;
+                padding-bottom: 10px;
+            '>
+                👤 Perfil activo: {rol}
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
         st.write(f"**{user['nombre']}**")
-        st.caption(f"Perfil: `{rol}`")
         st.markdown("---")
         menu = st.radio("Navegación", opciones_menu)
         st.markdown("---")

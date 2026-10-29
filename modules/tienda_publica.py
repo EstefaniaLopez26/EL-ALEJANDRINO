@@ -8,7 +8,6 @@ from database.db_manager import encriptar_password, registrar_auditoria, obtener
 from modules.seguridad_auth import vista_login_recuperacion
 from modules.ventas_facturacion import CODIGOS_PROMO
 
-# Imagen corporativa de respaldo elegante para cuando el ISBN no tenga carátula disponible
 FALLBACK_COVER = "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=400"
 
 @st.cache_data
@@ -90,7 +89,7 @@ def mostrar_landing_sobre_nosotros():
         '</div>'
         '</div>'
         '<div style="border-top:1px solid rgba(255,255,255,0.12); padding-top:16px; display:flex; justify-content:space-between; align-items:center; font-size:0.82rem; color:#94A3B8;">'
-        '<div>📍 Sede Principal: Duitama & Bogotá, Colombia • 📞 Atención al Lector: (608) 760-0000 • ✉️ contacto@alejandrino.com</div>'
+        '<div>📍 Sede Principal: Duitama & Bogotá, Colombia • ✉️ elalejandrino1@gmail.com</div>'
         '<div>© 2026 Librería El Alejandrino • Todos los derechos reservados</div>'
         '</div>'
         '</div>'
@@ -117,13 +116,13 @@ def vista_catalogo_tienda(conn, df_todos):
         df_filtrado = df_filtrado[df_filtrado['categoria'] == cat_sel]
 
     if orden_sel == "Menor Precio":
-        df_filtrado = df_filtrado.sort_values(by="precioVenta", ascending=True)
+        df_filtrado = df_filtrado.sort_values(by="precio Venta", ascending=True)
     elif orden_sel == "Mayor Precio":
-        df_filtrado = df_filtrado.sort_values(by="precioVenta", ascending=False)
+        df_filtrado = df_filtrado.sort_values(by="precio Venta", ascending=False)
     elif orden_sel == "Título (A-Z)":
         df_filtrado = df_filtrado.sort_values(by="titulo", ascending=True)
     elif orden_sel == "Más Recientes":
-        df_filtrado = df_filtrado.sort_values(by="anioPublicacion", ascending=False)
+        df_filtrado = df_filtrado.sort_values(by="año Publicacion", ascending=False)
 
     st.caption(f"Mostrando **{min(len(df_filtrado), libros_por_pag)}** de **{len(df_filtrado)}** títulos disponibles en la librería.")
 
@@ -137,7 +136,7 @@ def vista_catalogo_tienda(conn, df_todos):
                     f'<span class="badge-categoria">{row["categoria"]}</span>'
                     f'<img src="{row["portada"]}" alt="{row["titulo"]}" style="width: 100%; height: 180px; object-fit: contain; background-color: #F7F4EE; border-radius: 8px; padding: 6px; margin-bottom: 6px;">'
                     f'<div class="titulo-clamp">{row["titulo"]}</div>'
-                    f'<p style="color:#555; font-size:0.82rem; margin:2px 0;">{row["autor"]} ({row["anioPublicacion"]})</p>'
+                    f'<p style="color:#555; font-size:0.82rem; margin:2px 0;">{row["autor"]} ({int(row["anioPublicacion"])})</p>'
                     f'<p style="color:#888; font-size:0.73rem; margin:0;">{row["editorial"]}</p>'
                     f'</div>'
                     f'<div>'
@@ -225,6 +224,15 @@ def vista_tienda_publica(conn):
     mostrar_landing_sobre_nosotros()
 
 def ventana_carrito_pasarela(conn):
+    import streamlit as st
+    import pandas as pd
+    from datetime import datetime
+    import os
+    from modules.generador_pdf import generar_factura_pdf
+    from database.db_manager import registrar_auditoria
+
+    CODIGOS_PROMO = {}
+
     c_volver, c_tit = st.columns([1.3, 4.7], vertical_alignment="center")
     if c_volver.button("⬅️ Volver a la Tienda", use_container_width=True):
         st.session_state['vista_actual'] = "tienda"
@@ -284,13 +292,16 @@ def ventana_carrito_pasarela(conn):
                 cor_p = st.text_input("Correo Electrónico para Factura", value=u_act.get('correo', ''))
                 dir_p = st.text_input("Dirección de Entrega y Ciudad", placeholder="Calle 16 # 14-22, Duitama")
                 met_p = st.selectbox("Selecciona tu Medio de Pago", [
-                    "💳 Tarjeta de Crédito / Débito (Visa, Mastercard, Amex)",
+                    "💳 Tarjeta de Crédito / Débito (Visa, Mastercard)",
                     "🏦 PSE - Débito desde Cuenta Bancaria",
                     "📱 Billetera Digital (Nequi / Daviplata)",
                     "💵 Pago Contra Entrega"
                 ])
-                ref_p = st.text_input("Número de Tarjeta / Celular (Simulado)", placeholder="**** **** **** 4242")
-                
+                ref_p = st.text_input("Número de Tarjeta / Celular", placeholder="**** **** **** 4242")
+              
+                compra_aprobada = False
+                factura_generada_ruta = ""
+
                 if st.form_submit_button("🔒 Confirmar Pago y Emitir Factura"):
                     if not nom_p or not ced_p or not dir_p:
                         st.error("Por favor completa tu nombre, documento y dirección de envío.")
@@ -301,10 +312,22 @@ def ventana_carrito_pasarela(conn):
                         c.execute("INSERT INTO ventas (cliente_id, empleado_id, fechaHora, subtotal, descuento, iva, total, estado) VALUES (1, 1, ?, ?, ?, ?, ?, 'Pagada')",
                                   (f_h, base_g, desc_v, iva_v, tot_v))
                         v_id = c.lastrowid
+                        
+                        detalles_para_pdf = [] 
+                        
                         for item in st.session_state['carrito']:
+                            precio_unitario = item['precioVenta']
                             c.execute("INSERT INTO detalle_ventas (venta_id, isbn, titulo, cantidad, precioUnitario, subtotalLinea) VALUES (?, ?, ?, 1, ?, ?)",
-                                      (v_id, item['isbn'], item['titulo'], item['precioVenta'], item['precioVenta']))
+                                      (v_id, item['isbn'], item['titulo'], precio_unitario, precio_unitario))
                             c.execute("UPDATE libros SET stockDisponible = MAX(0, stockDisponible - 1) WHERE isbn = ?", (item['isbn'],))
+                            
+                            detalles_para_pdf.append({
+                                'titulo': item['titulo'],
+                                'cantidad': 1,
+                                'precioUnitario': precio_unitario,
+                                'subtotalLinea': precio_unitario
+                            })
+
                         num_f = f"FACT-{v_id:05d}"
                         c.execute("""
                             INSERT INTO facturas (numeroFactura, venta_id, cliente_cedula, cliente_nombre, fechaEmision, subtotal, descuento, iva19, totalPagar, medioPago, montoRecibido, estado)
@@ -312,10 +335,39 @@ def ventana_carrito_pasarela(conn):
                         """, (num_f, v_id, ced_p, nom_p, f_h, base_g, desc_v, iva_v, tot_v, medio_bd, tot_v))
                         conn.commit()
                         registrar_auditoria(conn, nom_p, "Cliente", "Pasarela Online", "COMPRA_APROBADA", f"Factura {num_f} por ${tot_v:,.2f}")
-                        st.session_state['carrito'] = []
-                        st.session_state['cupon_activo'] = 0.0
-                        st.balloons()
-                        st.success(f"🎉 ¡Transacción aprobada! Se generó tu Factura Legal **{num_f}** por **$ {tot_v:,.2f} COP**.")
+                        
+                        # --- GENERAR EL PDF ---
+                        datos_venta = {
+                            'numero_factura': num_f,
+                            'cliente_nombre': nom_p,
+                            'cliente_cedula': ced_p,
+                            'fecha': datetime.now().strftime("%Y-%m-%d"),
+                            'subtotal': base_g,
+                            'iva': iva_v,
+                            'total': tot_v
+                        }
+                        
+                        ruta_del_pdf = generar_factura_pdf(datos_venta, detalles_para_pdf)
+                        factura_generada_ruta = ruta_del_pdf
+                        compra_aprobada = True
+                        
+            if compra_aprobada:
+                st.balloons()
+                st.success(f"🎉 ¡Transacción aprobada! Se generó tu Factura **{num_f}** por **$ {tot_v:,.2f} COP**.")
+                
+                with open(factura_generada_ruta, "rb") as pdf_file:
+                    st.download_button(
+                        label="📄 Descargar Factura (PDF)",
+                        data=pdf_file,
+                        file_name=factura_generada_ruta,
+                        mime="application/pdf",
+                        type="primary",
+                        use_container_width=True
+                    )
+                
+                # Vaciar carrito 
+                st.session_state['carrito'] = []
+                st.session_state['cupon_activo'] = 0.0
 
 def ventana_solicitud_prestamo(conn):
     lib_p = st.session_state['libro_alquiler_sel']
