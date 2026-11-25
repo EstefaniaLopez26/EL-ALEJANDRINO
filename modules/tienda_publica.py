@@ -7,8 +7,10 @@ import os
 from database.db_manager import encriptar_password, registrar_auditoria, obtener_libros_activos
 from modules.seguridad_auth import vista_login_recuperacion
 from modules.ventas_facturacion import CODIGOS_PROMO
+from modules.generador_pdf import generar_factura_pdf
 
 FALLBACK_COVER = "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=400"
+
 
 @st.cache_data
 def obtener_banner_base64():
@@ -16,6 +18,7 @@ def obtener_banner_base64():
         with open("assets/banner.png", "rb") as f:
             return base64.b64encode(f.read()).decode("utf-8")
     return ""
+
 
 def mostrar_imagen_banner_con_recomendados(df_todos):
     indices_top = [0, 8, 16, 30, 32, 38, 45, 59, 73, 83]
@@ -63,6 +66,7 @@ def mostrar_imagen_banner_con_recomendados(df_todos):
     )
     st.markdown(html_completo, unsafe_allow_html=True)
 
+
 def mostrar_landing_sobre_nosotros():
     html_landing = (
         '<div class="landing-footer-azul">'
@@ -96,6 +100,7 @@ def mostrar_landing_sobre_nosotros():
     )
     st.markdown(html_landing, unsafe_allow_html=True)
 
+
 def vista_catalogo_tienda(conn, df_todos):
     f_col1, f_col2, f_col3, f_col4 = st.columns([2.3, 1.5, 1.2, 1])
     busqueda = f_col1.text_input("🔍 Buscar por título, autor, editorial o ISBN...", placeholder="Ej: Gabriel García Márquez, Clean Code, Dune...")
@@ -116,13 +121,13 @@ def vista_catalogo_tienda(conn, df_todos):
         df_filtrado = df_filtrado[df_filtrado['categoria'] == cat_sel]
 
     if orden_sel == "Menor Precio":
-        df_filtrado = df_filtrado.sort_values(by="precio Venta", ascending=True)
+        df_filtrado = df_filtrado.sort_values(by="precioVenta", ascending=True)
     elif orden_sel == "Mayor Precio":
-        df_filtrado = df_filtrado.sort_values(by="precio Venta", ascending=False)
+        df_filtrado = df_filtrado.sort_values(by="precioVenta", ascending=False)
     elif orden_sel == "Título (A-Z)":
         df_filtrado = df_filtrado.sort_values(by="titulo", ascending=True)
     elif orden_sel == "Más Recientes":
-        df_filtrado = df_filtrado.sort_values(by="año Publicacion", ascending=False)
+        df_filtrado = df_filtrado.sort_values(by="anioPublicacion", ascending=False)
 
     st.caption(f"Mostrando **{min(len(df_filtrado), libros_por_pag)}** de **{len(df_filtrado)}** títulos disponibles en la librería.")
 
@@ -147,23 +152,26 @@ def vista_catalogo_tienda(conn, df_todos):
                 )
                 st.markdown(card_html, unsafe_allow_html=True)
                 btn_col1, btn_col2 = st.columns(2)
-                if btn_col1.button("🛒 Comprar", key=f"pub_buy_{row['id']}"):
+                sin_stock = int(row['stockDisponible']) <= 0
+
+                if btn_col1.button("🛒 Comprar", key=f"pub_buy_{row['id']}", disabled=sin_stock):
                     st.session_state['carrito'].append(row.to_dict())
                     st.session_state['vista_actual'] = "ventana_carrito"
                     st.rerun()
-                if btn_col2.button("📚 Alquilar", key=f"pub_rent_{row['id']}"):
+                if btn_col2.button("📚 Alquilar", key=f"pub_rent_{row['id']}", disabled=sin_stock):
                     st.session_state['libro_alquiler_sel'] = row.to_dict()
                     st.session_state['vista_actual'] = "ventana_prestamo"
                     st.rerun()
     else:
         st.info("No se encontraron libros con los filtros seleccionados.")
 
+
 def vista_tienda_publica(conn):
     df_todos = obtener_libros_activos(conn)
     mostrar_imagen_banner_con_recomendados(df_todos)
 
     tab_catalogo, tab_login, tab_registro = st.tabs([
-        "📖 Explorar Catálogo", 
+        "📖 Explorar Catálogo",
         "🔐 Iniciar Sesión",
         "📝 Crear Cuenta de Lector"
     ])
@@ -181,8 +189,10 @@ def vista_tienda_publica(conn):
                     if st.form_submit_button("🎁 Recibir Cupón de 15% DCTO"):
                         if correo_news and "@" in correo_news:
                             c = conn.cursor()
-                            c.execute("INSERT OR IGNORE INTO suscriptores_newsletter (correo, cupon_generado, fechaHora) VALUES (?, 'BIENVENIDO15', ?)",
-                                      (correo_news.strip(), datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                            c.execute(
+                                "INSERT OR IGNORE INTO suscriptores_newsletter (correo, cupon_generado, fechaHora) VALUES (?, 'BIENVENIDO15', ?)",
+                                (correo_news.strip(), datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                            )
                             conn.commit()
                             st.session_state['cupon_activo'] = 15.0
                             st.session_state['codigo_cupon_texto'] = "BIENVENIDO15"
@@ -220,19 +230,11 @@ def vista_tienda_publica(conn):
                             st.error("El documento o el correo electrónico ya se encuentran registrados.")
                     else:
                         st.warning("Completa todos los campos obligatorios.")
-                        
+
     mostrar_landing_sobre_nosotros()
 
+
 def ventana_carrito_pasarela(conn):
-    import streamlit as st
-    import pandas as pd
-    from datetime import datetime
-    import os
-    from modules.generador_pdf import generar_factura_pdf
-    from database.db_manager import registrar_auditoria
-
-    CODIGOS_PROMO = {}
-
     c_volver, c_tit = st.columns([1.3, 4.7], vertical_alignment="center")
     if c_volver.button("⬅️ Volver a la Tienda", use_container_width=True):
         st.session_state['vista_actual'] = "tienda"
@@ -247,26 +249,42 @@ def ventana_carrito_pasarela(conn):
     col_resumen, col_pasarela = st.columns([1.25, 1])
     with col_resumen:
         st.markdown("### 📚 Obras Seleccionadas")
-        df_c = pd.DataFrame(st.session_state['carrito'])
-        st.dataframe(df_c[['isbn', 'titulo', 'autor', 'editorial', 'precioVenta']], use_container_width=True, hide_index=True)
-        
+        df_raw = pd.DataFrame(st.session_state['carrito'])
+        df_c = (
+            df_raw.groupby(['isbn', 'titulo', 'autor', 'editorial', 'precioVenta'], as_index=False)
+            .size()
+            .rename(columns={'size': 'cantidad'})
+        )
+        df_c['subtotalLinea'] = df_c['cantidad'] * df_c['precioVenta']
+
+        st.dataframe(
+            df_c[['isbn', 'titulo', 'autor', 'cantidad', 'precioVenta', 'subtotalLinea']],
+            use_container_width=True,
+            hide_index=True
+        )
+
         cp1, cp2, cp3 = st.columns([2, 1, 1])
-        cupon_in = cp1.text_input("🎟️ Cupón de Descuento", value=st.session_state['codigo_cupon_texto'], placeholder="Ej: BIENVENIDO15")
+        cupon_in = cp1.text_input(
+            "🎟️ Cupón de Descuento",
+            value=st.session_state['codigo_cupon_texto'],
+            placeholder="Ej: BIENVENIDO15"
+        )
         if cp2.button("Aplicar Cupón"):
             cod_u = cupon_in.strip().upper()
             descuentos = {**CODIGOS_PROMO, "BIENVENIDO15": 15.0}
             if cod_u in descuentos:
                 st.session_state['cupon_activo'] = descuentos[cod_u]
                 st.session_state['codigo_cupon_texto'] = cod_u
-                st.success(f"Cupón {cod_u} aplicado.")
+                st.success(f"Cupón {cod_u} aplicado ({descuentos[cod_u]}% DCTO).")
             else:
                 st.error("Cupón no válido.")
         if cp3.button("🗑️ Vaciar Carrito"):
             st.session_state['carrito'] = []
             st.session_state['cupon_activo'] = 0.0
+            st.session_state['codigo_cupon_texto'] = ""
             st.rerun()
 
-        sub_b = round(float(df_c['precioVenta'].sum()), 2)
+        sub_b = round(float(df_c['subtotalLinea'].sum()), 2)
         desc_v = round(sub_b * (st.session_state['cupon_activo'] / 100.0), 2)
         base_g = round(sub_b - desc_v, 2)
         iva_v = round(base_g * 0.19, 2)
@@ -298,76 +316,112 @@ def ventana_carrito_pasarela(conn):
                     "💵 Pago Contra Entrega"
                 ])
                 ref_p = st.text_input("Número de Tarjeta / Celular", placeholder="**** **** **** 4242")
-              
+
                 compra_aprobada = False
                 factura_generada_ruta = ""
+                num_f = ""
 
                 if st.form_submit_button("🔒 Confirmar Pago y Emitir Factura"):
-                    if not nom_p or not ced_p or not dir_p:
+                    if not nom_p.strip() or not ced_p.strip() or not dir_p.strip():
                         st.error("Por favor completa tu nombre, documento y dirección de envío.")
                     else:
                         c = conn.cursor()
-                        f_h = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        medio_bd = "Tarjeta" if "Tarjeta" in met_p else ("Transferencia" if "PSE" in met_p or "Nequi" in met_p else "Efectivo")
-                        c.execute("INSERT INTO ventas (cliente_id, empleado_id, fechaHora, subtotal, descuento, iva, total, estado) VALUES (1, 1, ?, ?, ?, ?, ?, 'Pagada')",
-                                  (f_h, base_g, desc_v, iva_v, tot_v))
-                        v_id = c.lastrowid
-                        
-                        detalles_para_pdf = [] 
-                        
-                        for item in st.session_state['carrito']:
-                            precio_unitario = item['precioVenta']
-                            c.execute("INSERT INTO detalle_ventas (venta_id, isbn, titulo, cantidad, precioUnitario, subtotalLinea) VALUES (?, ?, ?, 1, ?, ?)",
-                                      (v_id, item['isbn'], item['titulo'], precio_unitario, precio_unitario))
-                            c.execute("UPDATE libros SET stockDisponible = MAX(0, stockDisponible - 1) WHERE isbn = ?", (item['isbn'],))
-                            
-                            detalles_para_pdf.append({
-                                'titulo': item['titulo'],
-                                'cantidad': 1,
-                                'precioUnitario': precio_unitario,
-                                'subtotalLinea': precio_unitario
-                            })
+                        stock_insuficiente = []
+                        for _, item in df_c.iterrows():
+                            c.execute("SELECT stockDisponible FROM libros WHERE isbn = ?", (item['isbn'],))
+                            res_st = c.fetchone()
+                            disp = res_st[0] if res_st else 0
+                            if item['cantidad'] > disp:
+                                stock_insuficiente.append(f"{item['titulo']} (solicitados: {item['cantidad']}, disponibles: {disp})")
 
-                        num_f = f"FACT-{v_id:05d}"
-                        c.execute("""
-                            INSERT INTO facturas (numeroFactura, venta_id, cliente_cedula, cliente_nombre, fechaEmision, subtotal, descuento, iva19, totalPagar, medioPago, montoRecibido, estado)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pagada')
-                        """, (num_f, v_id, ced_p, nom_p, f_h, base_g, desc_v, iva_v, tot_v, medio_bd, tot_v))
-                        conn.commit()
-                        registrar_auditoria(conn, nom_p, "Cliente", "Pasarela Online", "COMPRA_APROBADA", f"Factura {num_f} por ${tot_v:,.2f}")
-                        
-                        # --- GENERAR EL PDF ---
-                        datos_venta = {
-                            'numero_factura': num_f,
-                            'cliente_nombre': nom_p,
-                            'cliente_cedula': ced_p,
-                            'fecha': datetime.now().strftime("%Y-%m-%d"),
-                            'subtotal': base_g,
-                            'iva': iva_v,
-                            'total': tot_v
-                        }
-                        
-                        ruta_del_pdf = generar_factura_pdf(datos_venta, detalles_para_pdf)
-                        factura_generada_ruta = ruta_del_pdf
-                        compra_aprobada = True
-                        
+                        if stock_insuficiente:
+                            st.error("🚫 Stock insuficiente para: " + ", ".join(stock_insuficiente))
+                        else:
+                            f_h = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            medio_bd = (
+                                "Tarjeta" if "Tarjeta" in met_p
+                                else ("Transferencia" if "PSE" in met_p or "Nequi" in met_p else "Efectivo")
+                            )
+
+                            cliente_id_venta = u_act.get('id') if st.session_state.get('tipo_usuario') == 'cliente' else None
+                            if not cliente_id_venta:
+                                c.execute("SELECT id FROM clientes WHERE cedula = ?", (ced_p.strip(),))
+                                row_cli = c.fetchone()
+                                cliente_id_venta = row_cli[0] if row_cli else 1
+
+                            c.execute(
+                                """INSERT INTO ventas (cliente_id, empleado_id, fechaHora, subtotal, descuento, iva, total, estado)
+                                   VALUES (?, 1, ?, ?, ?, ?, ?, 'Pagada')""",
+                                (cliente_id_venta, f_h, base_g, desc_v, iva_v, tot_v)
+                            )
+                            v_id = c.lastrowid
+
+                            detalles_para_pdf = []
+                            for _, item in df_c.iterrows():
+                                cant_item = int(item['cantidad'])
+                                precio_unit = float(item['precioVenta'])
+                                sub_linea = float(item['subtotalLinea'])
+
+                                c.execute(
+                                    """INSERT INTO detalle_ventas (venta_id, isbn, titulo, cantidad, precioUnitario, subtotalLinea)
+                                       VALUES (?, ?, ?, ?, ?, ?)""",
+                                    (v_id, item['isbn'], item['titulo'], cant_item, precio_unit, sub_linea)
+                                )
+                                c.execute(
+                                    "UPDATE libros SET stockDisponible = MAX(0, stockDisponible - ?) WHERE isbn = ?",
+                                    (cant_item, item['isbn'])
+                                )
+                                detalles_para_pdf.append({
+                                    'isbn': item['isbn'],
+                                    'titulo': item['titulo'],
+                                    'cantidad': cant_item,
+                                    'precioUnitario': precio_unit,
+                                    'subtotalLinea': sub_linea
+                                })
+
+                            num_f = f"FACT-{v_id:05d}"
+                            c.execute("""
+                                INSERT INTO facturas (numeroFactura, venta_id, cliente_cedula, cliente_nombre, fechaEmision, subtotal, descuento, iva19, totalPagar, medioPago, montoRecibido, estado)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pagada')
+                            """, (num_f, v_id, ced_p.strip(), nom_p.strip(), f_h, base_g, desc_v, iva_v, tot_v, medio_bd, tot_v))
+                            conn.commit()
+                            registrar_auditoria(
+                                conn, nom_p.strip(), "Cliente", "Pasarela Online",
+                                "COMPRA_APROBADA", f"Factura {num_f} por ${tot_v:,.2f}"
+                            )
+
+                            datos_venta = {
+                                'numero_factura': num_f,
+                                'cliente_nombre': nom_p.strip(),
+                                'cliente_cedula': ced_p.strip(),
+                                'fecha': datetime.now().strftime("%Y-%m-%d"),
+                                'subtotal': base_g,
+                                'descuento': desc_v,
+                                'iva': iva_v,
+                                'total': tot_v
+                            }
+
+                            factura_generada_ruta = generar_factura_pdf(datos_venta, detalles_para_pdf)
+                            compra_aprobada = True
+
             if compra_aprobada:
                 st.balloons()
                 st.success(f"🎉 ¡Transacción aprobada! Se generó tu Factura **{num_f}** por **$ {tot_v:,.2f} COP**.")
-                
+
                 with open(factura_generada_ruta, "rb") as pdf_file:
                     st.download_button(
                         label="📄 Descargar Factura (PDF)",
                         data=pdf_file,
-                        file_name=factura_generada_ruta,
+                        file_name=os.path.basename(factura_generada_ruta),
                         mime="application/pdf",
                         type="primary",
                         use_container_width=True
                     )
-                
-                # Vaciar carrito 
+
                 st.session_state['carrito'] = []
                 st.session_state['cupon_activo'] = 0.0
+                st.session_state['codigo_cupon_texto'] = ""
+
 
 def ventana_solicitud_prestamo(conn):
     lib_p = st.session_state['libro_alquiler_sel']
@@ -376,7 +430,7 @@ def ventana_solicitud_prestamo(conn):
         st.session_state['vista_actual'] = "tienda"
         st.session_state['libro_alquiler_sel'] = None
         st.rerun()
-    c_tit.markdown(f"## 📚 Solicitud de Préstamo Bibliotecario")
+    c_tit.markdown("## 📚 Solicitud de Préstamo Bibliotecario")
     st.markdown("---")
 
     col_img, col_form = st.columns([1, 2])
@@ -395,18 +449,39 @@ def ventana_solicitud_prestamo(conn):
             nom_l = st.text_input("Nombre Completo", value=u_act.get('nombre', ''))
             dias_l = st.selectbox("Tiempo de Préstamo Solicitado", [7, 14, 21], format_func=lambda d: f"{d} días calendario")
             if st.form_submit_button("✅ Confirmar Préstamo Bibliotecario"):
-                if not ced_l or not nom_l:
+                if not ced_l.strip() or not nom_l.strip():
                     st.warning("Por favor ingresa tu documento y nombre completo.")
                 else:
                     hoy_s = datetime.now().strftime("%Y-%m-%d")
-                    f_lim = (datetime.now() + timedelta(days=int(dias_l))).strftime("%Y-%m-%d")
-                    id_pr = f"PR-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                     c = conn.cursor()
-                    c.execute("""
-                        INSERT INTO prestamos (idPrestamo, cliente_id, cedula_cliente, nombre_cliente, isbn, titulo_libro, empleado_id, fechaSalida, fechaLimite, estado, multa)
-                        VALUES (?, 1, ?, ?, ?, ?, 3, ?, ?, 'Activo', 0.0)
-                    """, (id_pr, ced_l.strip(), nom_l.strip(), lib_p['isbn'], lib_p['titulo'], hoy_s, f_lim))
-                    c.execute("UPDATE libros SET stockDisponible = MAX(0, stockDisponible - 1) WHERE isbn = ?", (lib_p['isbn'],))
-                    conn.commit()
-                    registrar_auditoria(conn, nom_l, "Cliente", "Préstamos", "RESERVA_WEB", f"Préstamo {id_pr} ({lib_p['titulo']})")
-                    st.success(f"🎉 ¡Préstamo **{id_pr}** registrado exitosamente! Límite de devolución: **{f_lim}**.")
+                    c.execute("SELECT stockDisponible FROM libros WHERE isbn = ?", (lib_p['isbn'],))
+                    res_st = c.fetchone()
+                    stock_actual = res_st[0] if res_st else 0
+
+                    c.execute(
+                        "SELECT COUNT(*) FROM prestamos WHERE cedula_cliente=? AND estado='Activo' AND fechaLimite < ?",
+                        (ced_l.strip(), hoy_s)
+                    )
+                    vencidos = c.fetchone()[0]
+
+                    if stock_actual <= 0:
+                        st.error("🚫 Lo sentimos, este ejemplar ya no cuenta con unidades disponibles para préstamo.")
+                    elif vencidos > 0:
+                        st.error("🚫 Tienes un préstamo vencido pendiente por devolver. Regulariza tu entrega en biblioteca.")
+                    else:
+                        cliente_id_prest = u_act.get('id') if st.session_state.get('tipo_usuario') == 'cliente' else None
+                        if not cliente_id_prest:
+                            c.execute("SELECT id FROM clientes WHERE cedula = ?", (ced_l.strip(),))
+                            row_cli = c.fetchone()
+                            cliente_id_prest = row_cli[0] if row_cli else 1
+
+                        f_lim = (datetime.now() + timedelta(days=int(dias_l))).strftime("%Y-%m-%d")
+                        id_pr = f"PR-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                        c.execute("""
+                            INSERT INTO prestamos (idPrestamo, cliente_id, cedula_cliente, nombre_cliente, isbn, titulo_libro, empleado_id, fechaSalida, fechaLimite, estado, multa)
+                            VALUES (?, ?, ?, ?, ?, ?, 3, ?, ?, 'Activo', 0.0)
+                        """, (id_pr, cliente_id_prest, ced_l.strip(), nom_l.strip(), lib_p['isbn'], lib_p['titulo'], hoy_s, f_lim))
+                        c.execute("UPDATE libros SET stockDisponible = MAX(0, stockDisponible - 1) WHERE isbn = ?", (lib_p['isbn'],))
+                        conn.commit()
+                        registrar_auditoria(conn, nom_l.strip(), "Cliente", "Préstamos", "RESERVA_WEB", f"Préstamo {id_pr} ({lib_p['titulo']})")
+                        st.success(f"🎉 ¡Préstamo **{id_pr}** registrado exitosamente! Límite de devolución: **{f_lim}**.")

@@ -5,21 +5,75 @@ from database.db_manager import registrar_auditoria
 
 VALOR_MULTA_DIA = 2500.0
 
+
 def vista_prestamos(conn, user):
     st.header("📚 Servicio de Biblioteca y Préstamos")
-    t_hist, t_pres, t_dev = st.tabs(["📋 Historial y Estado de Préstamos", "📤 Nuevo Préstamo", "📥 Recepción y Devoluciones"])
-    
+    t_hist, t_pres, t_dev = st.tabs([
+        "📋 Historial y Estado de Préstamos",
+        "📤 Nuevo Préstamo",
+        "📥 Recepción y Devoluciones"
+    ])
+
     with t_hist:
-        filtro_ced = st.text_input("🔍 Buscar por Cédula, Nombre del Lector o Código de Préstamo")
-        df_h = pd.read_sql_query("SELECT idPrestamo, cedula_cliente, nombre_cliente, isbn, titulo_libro, fechaSalida, fechaLimite, fechaDevolucion, estadoEjemplar, estado, multa FROM prestamos ORDER BY id DESC", conn)
-        if filtro_ced:
-            df_h = df_h[df_h['cedula_cliente'].str.contains(filtro_ced, case=False) | df_h['nombre_cliente'].str.contains(filtro_ced, case=False) | df_h['idPrestamo'].str.contains(filtro_ced, case=False)]
-        st.dataframe(df_h, use_container_width=True, hide_index=True)
+        c_busq, c_est = st.columns([2.2, 1])
+        filtro_ced = c_busq.text_input("🔍 Buscar por Cédula, Nombre del Lector o Código de Préstamo")
+        filtro_estado = c_est.selectbox("Estado", ["Todos", "Activo", "Vencido", "Devuelto"])
+
+        df_h = pd.read_sql_query(
+            """SELECT idPrestamo, cedula_cliente, nombre_cliente, isbn, titulo_libro,
+                      fechaSalida, fechaLimite, fechaDevolucion, estadoEjemplar, estado, multa
+               FROM prestamos ORDER BY id DESC""",
+            conn
+        )
+
+        if not df_h.empty:
+            hoy_dt = datetime.now().date()
+
+            def evaluar_estado_y_mora(row):
+                if row['estado'] == 'Devuelto':
+                    return 'Devuelto', float(row['multa'])
+                f_lim = datetime.strptime(row['fechaLimite'], "%Y-%m-%d").date()
+                dias_retraso = (hoy_dt - f_lim).days
+                if dias_retraso > 0:
+                    return f"Vencido ({dias_retraso}d)", float(dias_retraso * VALOR_MULTA_DIA)
+                return 'Activo', 0.0
+
+            resultados = df_h.apply(evaluar_estado_y_mora, axis=1)
+            df_h['estadoReal'] = [r[0] for r in resultados]
+            df_h['moraActual'] = [r[1] for r in resultados]
+
+            total_vencidos = df_h['estadoReal'].str.startswith("Vencido").sum()
+            if total_vencidos > 0:
+                mora_total = df_h[df_h['estadoReal'].str.startswith("Vencido")]['moraActual'].sum()
+                st.warning(
+                    f"⏰ Hay **{total_vencidos}** préstamo(s) vencido(s) con una mora acumulada estimada de "
+                    f"**$ {mora_total:,.0f} COP**."
+                )
+
+            if filtro_ced:
+                df_h = df_h[
+                    df_h['cedula_cliente'].str.contains(filtro_ced, case=False) |
+                    df_h['nombre_cliente'].str.contains(filtro_ced, case=False) |
+                    df_h['idPrestamo'].str.contains(filtro_ced, case=False)
+                ]
+
+            if filtro_estado == "Vencido":
+                df_h = df_h[df_h['estadoReal'].str.startswith("Vencido")]
+            elif filtro_estado != "Todos":
+                df_h = df_h[df_h['estado'] == filtro_estado]
+
+            columnas_mostrar = [
+                'idPrestamo', 'cedula_cliente', 'nombre_cliente', 'isbn', 'titulo_libro',
+                'fechaSalida', 'fechaLimite', 'fechaDevolucion', 'estadoEjemplar', 'estadoReal', 'moraActual'
+            ]
+            st.dataframe(df_h[columnas_mostrar], use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay registros de préstamos en el sistema.")
 
     with t_pres:
         df_cli = pd.read_sql_query("SELECT id, cedula, nombres, apellidos FROM clientes WHERE activo=1", conn)
         df_lib = pd.read_sql_query("SELECT isbn, titulo, stockDisponible FROM libros WHERE activo=1 AND stockDisponible > 0", conn)
-        
+
         with st.form("form_nuevo_prestamo"):
             c1, c2 = st.columns(2)
             cli_opciones = [f"{r['cedula']} - {r['nombres']} {r['apellidos']}" for _, r in df_cli.iterrows()]
@@ -27,7 +81,7 @@ def vista_prestamos(conn, user):
             lib_opciones = [f"{r['isbn']} - {r['titulo']} (Disponibles: {r['stockDisponible']})" for _, r in df_lib.iterrows()]
             lib_sel = c2.selectbox("Obra Solicitada", lib_opciones if lib_opciones else ["Sin stock disponible"])
             dias_prestamo = c1.number_input("Días Autorizados de Préstamo", min_value=1, max_value=30, value=8)
-            
+
             if st.form_submit_button("Autorizar Préstamo"):
                 if cli_opciones and lib_opciones:
                     ced_c = cli_sel.split(" - ")[0]
@@ -35,17 +89,20 @@ def vista_prestamos(conn, user):
                     id_c = int(df_cli[df_cli['cedula'] == ced_c].iloc[0]['id'])
                     isbn_l = lib_sel.split(" - ")[0]
                     tit_l = lib_sel.split(" - ")[1].split(" (Disponibles:")[0]
-                    
+
                     hoy_str = datetime.now().strftime("%Y-%m-%d")
                     c = conn.cursor()
-                    c.execute("SELECT COUNT(*) FROM prestamos WHERE cedula_cliente=? AND (estado='Activo' AND fechaLimite < ?)", (ced_c, hoy_str))
+                    c.execute(
+                        "SELECT COUNT(*) FROM prestamos WHERE cedula_cliente=? AND (estado='Activo' AND fechaLimite < ?)",
+                        (ced_c, hoy_str)
+                    )
                     vencidos = c.fetchone()[0]
                     if vencidos > 0:
                         st.error("🚫 El lector presenta un préstamo vencido pendiente por devolver.")
                     else:
                         id_prestamo = f"PR-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                         f_limite = (datetime.now() + timedelta(days=int(dias_prestamo))).strftime("%Y-%m-%d")
-                        
+
                         c.execute("""
                             INSERT INTO prestamos (idPrestamo, cliente_id, cedula_cliente, nombre_cliente, isbn, titulo_libro, empleado_id, fechaSalida, fechaLimite, estado, multa)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Activo', 0.0)
@@ -61,21 +118,24 @@ def vista_prestamos(conn, user):
         if df_act.empty:
             st.info("No hay préstamos activos pendientes de devolución.")
         else:
-            opciones_p = [f"{r['idPrestamo']} | {r['nombre_cliente']} ({r['cedula_cliente']}) - {r['titulo_libro']} (Vence: {r['fechaLimite']})" for _, r in df_act.iterrows()]
+            opciones_p = [
+                f"{r['idPrestamo']} | {r['nombre_cliente']} ({r['cedula_cliente']}) - {r['titulo_libro']} (Vence: {r['fechaLimite']})"
+                for _, r in df_act.iterrows()
+            ]
             pres_sel = st.selectbox("Seleccionar Préstamo Activo", opciones_p)
             id_p_sel = pres_sel.split(" | ")[0]
             row_p = df_act[df_act['idPrestamo'] == id_p_sel].iloc[0]
-            
+
             with st.form("form_devolucion"):
                 c1, c2 = st.columns(2)
                 estado_ejemplar = c1.selectbox("Estado Físico del Libro Devuelto", ["Bueno", "Regular", "Dañado"])
                 fecha_rec = c2.date_input("Fecha de Recepción", value=datetime.now())
-                
+
                 if st.form_submit_button("Registrar Retorno de Obra"):
                     f_lim_dt = datetime.strptime(row_p['fechaLimite'], "%Y-%m-%d").date()
                     dias_mora = (fecha_rec - f_lim_dt).days
                     multa_calc = max(0.0, dias_mora * VALOR_MULTA_DIA)
-                    
+
                     c = conn.cursor()
                     c.execute("""
                         UPDATE prestamos SET fechaDevolucion=?, estadoEjemplar=?, estado='Devuelto', multa=?
@@ -84,7 +144,7 @@ def vista_prestamos(conn, user):
                     c.execute("UPDATE libros SET stockDisponible = stockDisponible + 1 WHERE isbn = ?", (row_p['isbn'],))
                     conn.commit()
                     registrar_auditoria(conn, user['nombre'], user['rol'], "Préstamos", "DEVOLUCION", f"Retorno {id_p_sel} - Multa: ${multa_calc:,.0f}")
-                    
+
                     if multa_calc > 0:
                         st.warning(f"⚠️ Entrega con retraso ({dias_mora} días). Se liquidó recargo por mora de **${multa_calc:,.2f} COP**.")
                     else:
