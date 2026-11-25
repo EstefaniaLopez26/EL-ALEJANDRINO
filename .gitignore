@@ -1,0 +1,16 @@
+# Entornos virtuales y compilados de Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Base de datos local y facturas generadas en pruebas
+*.db
+*.sqlite3
+facturas_pdf/
+
+# Archivos de sistema y editores
+.DS_Store
+Thumbs.db

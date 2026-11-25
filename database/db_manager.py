@@ -1,21 +1,30 @@
 import sqlite3
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime
 import pandas as pd
 
 DB_NAME = 'alejandrino.db'
 
+TABLAS_PERMITIDAS = {"empleados", "editoriales", "libros", "clientes", "ventas", "facturas", "prestamos"}
+COLUMNAS_PERMITIDAS = {"telefono", "direccion", "activo", "descuento"}
+
+
 def encriptar_password(password: str) -> str:
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
 
 def get_connection():
     return sqlite3.connect(DB_NAME, check_same_thread=False)
 
+
 def _asegurar_columna(cursor, tabla: str, columna: str, definicion: str):
+    if tabla not in TABLAS_PERMITIDAS or columna not in COLUMNAS_PERMITIDAS:
+        raise ValueError(f"Operación de esquema no permitida: {tabla}.{columna}")
     try:
         cursor.execute(f"ALTER TABLE {tabla} ADD COLUMN {columna} {definicion}")
     except sqlite3.OperationalError:
         pass
+
 
 def obtener_catalogo_real():
     """Catálogo de 45 libros depurados para garantizar portadas reales."""
@@ -83,6 +92,7 @@ def obtener_catalogo_real():
     
     return catalogo_final
 
+
 def init_db():
     conn = get_connection()
     c = conn.cursor()
@@ -98,10 +108,7 @@ def init_db():
                     contacto TEXT, telefono TEXT, direccion TEXT, correo TEXT, activo INTEGER DEFAULT 1)''')
     _asegurar_columna(c, "editoriales", "direccion", "TEXT DEFAULT 'Bogotá, Colombia'")
 
-    # ¡ESTO BORRA LA TABLA DE LIBROS FEOS PARA FORZAR EL REINICIO!
-    c.execute("DROP TABLE IF EXISTS libros")
-    
-    c.execute('''CREATE TABLE libros (
+    c.execute('''CREATE TABLE IF NOT EXISTS libros (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, isbn TEXT UNIQUE NOT NULL, titulo TEXT NOT NULL,
                     autor TEXT NOT NULL, editorial TEXT NOT NULL, categoria TEXT NOT NULL,
                     anioPublicacion INTEGER DEFAULT 2020, precioVenta REAL DEFAULT 0.0,
@@ -176,11 +183,14 @@ def init_db():
         c.execute("INSERT OR IGNORE INTO editoriales (nit, razonSocial, contacto, telefono, direccion, correo, activo) VALUES (?, ?, ?, ?, ?, ?, 1)",
                   (nit, raz, con, tel, dir_e, cor_e))
 
-    for libro in obtener_catalogo_real():
-        c.execute("""
-            INSERT INTO libros (isbn, titulo, autor, editorial, categoria, anioPublicacion, precioVenta, stockDisponible, stockMinimo, portada, activo)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, libro)
+    # Poblar catálogo base solo si la tabla libros está vacía
+    c.execute("SELECT COUNT(*) FROM libros")
+    if c.fetchone()[0] == 0:
+        for libro in obtener_catalogo_real():
+            c.execute("""
+                INSERT INTO libros (isbn, titulo, autor, editorial, categoria, anioPublicacion, precioVenta, stockDisponible, stockMinimo, portada, activo)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, libro)
 
     pwd_cli = encriptar_password("cliente123")
     clientes_base = [("1052345678", "Javier", "Rodríguez", "3159876543", "cliente@correo.com", pwd_cli, "Calle 16 # 14-22, Duitama")]
@@ -191,6 +201,7 @@ def init_db():
     conn.commit()
     return conn
 
+
 def registrar_auditoria(conn, usuario_nombre: str, rol: str, modulo: str, accion: str, detalle: str):
     c = conn.cursor()
     fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -200,6 +211,6 @@ def registrar_auditoria(conn, usuario_nombre: str, rol: str, modulo: str, accion
     """, (usuario_nombre, rol, modulo, accion, detalle, fecha_actual))
     conn.commit()
 
-# Sin bloqueo de caché para que cargue los datos frescos
+
 def obtener_libros_activos(conn):
     return pd.read_sql_query("SELECT * FROM libros WHERE activo = 1", conn)
