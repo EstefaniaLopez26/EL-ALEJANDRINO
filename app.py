@@ -51,7 +51,7 @@ def vista_resumen_ejecutivo(conn, user):
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric(f"Recaudo Mes ({mes_actual})", f"$ {recaudo_mes:,.0f}")
-    c2.metric("Inventario Disponible", f"{total_unidades:,} uds", f"{len(df_lib)} títulos")
+    c2.metric("Inventario Disponible", f"{total_unidades:,} unidades", f"{len(df_lib)} títulos")
     c3.metric("Préstamos Activos", len(df_pres), f"{len(prestamos_vencidos)} vencidos", delta_color="inverse")
     c4.metric("Alertas Stock Mínimo", len(df_stock_bajo), "Requieren reposición" if len(df_stock_bajo) > 0 else "Óptimo", delta_color="inverse")
 
